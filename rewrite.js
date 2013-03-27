@@ -155,16 +155,29 @@
     },
 
     VariableDeclarator: function (node, jscode, is_last) {
-      rewrite_node.call(this, node.id, jscode);
       if (node.init) {
-        jscode.set(loc_between(node.id, node.init, {hoffset: 1}), "=");
+        var assignment_node = {
+          type: 'AssignmentExpression',
+          start: node.start,
+          end: node.end,
+          loc: node.loc,
+          left: node.id,
+          right: node.init,
+          operator: '='
+        };
+        rewrite_rules.AssignmentExpression.call(this, assignment_node, jscode);
       }
+      rewrite_node.call(this, node.id, jscode);
 
       if (!is_last) {
         jscode.set(node.loc.end, ',');
       } else {
         jscode.set(node.loc.end, ';');
       }
+    },
+
+    AssignmentExpression: function (node, jscode) {
+      rewrite_rules.BinaryExpression.call(this, node, jscode);
     },
 
     BlockStatement: function (node, jscode) {
@@ -198,7 +211,13 @@
     },
 
     UnaryExpression: function (node, jscode) {
-      jscode.set(node.loc.start, node.operator);
+      var loc;
+      if (node.prefix) {
+        loc = node.loc.start;
+      } else {
+        loc = node.argument.loc.end;
+      }
+      jscode.set(loc, node.operator);
     },
 
     ArrayExpression: function (node, jscode) {
@@ -280,6 +299,33 @@
         }
         jscode.set(loc_between(node.consequent, node.alternate, {valign: 'bottom', hoffset: 1, voffset: 1}), _else);
       }
+    },
+
+    ConditionalExpression: function (node, jscode) {
+      jscode.set(loc_between(node.test, node.consequent, { hoffset: 1 }), '?');
+      jscode.set(loc_between(node.consequent, node.alternate, { hoffset: 1 }), ':');
+    },
+
+    ForInit: function (node, jscode) {
+    },
+
+    UpdateExpression: function (node, jscode) {
+      rewrite_rules.UnaryExpression.call(this, node, jscode);
+    },
+
+    ForStatement: function (node, jscode) {
+      jscode.set(node.loc.start, 'for');
+      jscode.set(new_loc_branch(node.init.loc.start, {column: -1}), '(');
+      jscode.set(node.init.loc.end, ';');
+      jscode.set(node.test.loc.end, ';');
+      jscode.set(node.update.loc.end, ')');
+    },
+
+    ForInStatement: function (node, jscode) {
+      jscode.set(node.loc.start, 'for');
+      jscode.set(new_loc_branch(node.left.loc.start, {column: -1}), '(');
+      jscode.set(loc_between(node.left, node.right, {hoffset: 1}), 'in');
+      jscode.set(node.right.loc.end, ')');
     }
   };
 
