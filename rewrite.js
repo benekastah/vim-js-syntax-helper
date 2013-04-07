@@ -183,7 +183,8 @@
     BlockStatement: function (node, jscode) {
       jscode.set(node.loc.start, "{");
       jscode.set(node.loc.end, "}");
-      node.loc.end.column += 1;
+      // This fixed a problem at one point, but I suspect the problem was elsewhere.
+      //node.loc.end.column += 1;
     },
 
     ExpressionStatement: function (node, jscode) {
@@ -267,8 +268,12 @@
     },
 
     ReturnStatement: function (node, jscode) {
-      jscode.set(node.loc.start, "return");
-      jscode.set(node.argument.loc.end, ';');
+      if (node.argument) {
+        jscode.set(node.loc.start, "return");
+        jscode.set(node.argument.loc.end, ';');
+      } else {
+        jscode.set(node.loc.start, "return;");
+      }
     },
 
     CallExpression: function (node, jscode) {
@@ -314,11 +319,48 @@
     },
 
     ForStatement: function (node, jscode) {
+      var node_for = {
+            loc: {
+              start: node.loc.start,
+              end: new_loc_branch(node.loc.start, {column: 3})
+            }
+          },
+          node_init = node.init,
+          node_test = node.test,
+          node_update = node.update;
+
       jscode.set(node.loc.start, 'for');
-      jscode.set(new_loc_branch(node.init.loc.start, {column: -1}), '(');
-      jscode.set(node.init.loc.end, ';');
-      jscode.set(node.test.loc.end, ';');
-      jscode.set(node.update.loc.end, ')');
+      
+      if (node_init) {
+        jscode.set(new_loc_branch(node_init.loc.start, {column: -1}), '(');
+        jscode.set(node_init.loc.end, ';');
+      } else {
+        node_init = {
+          loc: {
+            start: loc_between(node_for, node_test || node_update || node.body, {hoffset: 1})
+          }
+        };
+        node_init.loc.end = new_loc_branch(node_init.loc.start, {column: 1});
+        jscode.set(node_init.loc.start, '(;');
+      }
+
+      if (node_test) {
+        jscode.set(node_test.loc.end, ';');
+      } else {
+        node_test = {
+          loc: {
+            start: loc_between(node_init, node_update || node.body, {hoffset: 1})
+          }
+        };
+        node_test.loc.end = new_loc_branch(node_test.loc.start, {column: 0});
+        jscode.set(node_test.loc.start, ';');
+      }
+
+      if (node_update) {
+        jscode.set(node_update.loc.end, ')');
+      } else {
+        jscode.set(loc_between(node_test, node.body, {hoffset: 1}), ')');
+      }
     },
 
     ForInStatement: function (node, jscode) {
@@ -326,6 +368,10 @@
       jscode.set(new_loc_branch(node.left.loc.start, {column: -1}), '(');
       jscode.set(loc_between(node.left, node.right, {hoffset: 1}), 'in');
       jscode.set(node.right.loc.end, ')');
+    },
+
+    ContinueStatement: function (node, jscode) {
+      jscode.set(node.loc.start, 'continue');
     }
   };
 
