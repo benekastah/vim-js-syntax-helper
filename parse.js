@@ -37,11 +37,6 @@ switch (type) {
 
 function rewrite(err, code) {
   if (err) throw err;
-
-  var onComment = function () {
-    console.log
-  };
-
   var ast = rewriter.get_ast(code, true);
   var rewritten_code = rewriter.rewrite(ast);
   console.log(rewritten_code);

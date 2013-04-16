@@ -192,15 +192,17 @@
     },
 
     EmptyStatement: function (node, jscode) {
-      var end;
-      if (!node.loc.end) {
-        end = new_loc_branch(node.loc.start, {column: 1});
-      } else {
-        end = new_loc_branch(node.loc.end, {column: -1});
-      }
+      // var end;
+      // if (!node.loc.end) {
+      //   end = new_loc_branch(node.loc.start, {column: 1});
+      // } else {
+      //   end = new_loc_branch(node.loc.end, {column: -1});
+      // }
 
-      jscode.set(node.loc.start, '(');
-      jscode.set(end, ')');
+      // jscode.set(node.loc.start, '(');
+      // jscode.set(end, ')');
+      
+      jscode.set(node.loc.start, ';');
     },
 
     BinaryExpression: function (node, jscode) {
@@ -492,22 +494,22 @@
     });
     walk.simple(ast, rewrite_rules, null, jscode);
 
-	var comments = ast.comments;
-	if (comments && comments.length) {
-		for (var c = 0, clen = comments.length; c < clen; c++) {
-			var comment = comments[c];
-			if (comment.block) {
-				jscode.set(comment.loc.start, '/*');
-			} else {
-				jscode.set(comment.loc.start, '//');
-			}
-			jscode.set({ line: comment.loc.start.line, column: comment.loc.start.column + 2 }, comment.text);
-			
-			if (comment.block) {
-				jscode.set(comment.loc.end, '*/');
-			}
-		}
-	}
+    var comments = ast.comments;
+    if (comments && comments.length) {
+      for (var c = 0, clen = comments.length; c < clen; c++) {
+        var comment = comments[c];
+        if (comment.block) {
+          jscode.set(comment.loc.start, '/*');
+        } else {
+          jscode.set(comment.loc.start, '//');
+        }
+        jscode.set({ line: comment.loc.start.line, column: comment.loc.start.column + 2 }, comment.text);
+        
+        if (comment.block) {
+          jscode.set(comment.loc.end, '*/');
+        }
+      }
+    }
 
     return jscode.toString();
   };
