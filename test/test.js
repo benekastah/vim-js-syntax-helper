@@ -2,15 +2,25 @@
 var rewriter = require('../rewrite.js');
 
 exports.Tester = Tester;
-function Tester() {
+function Tester(tests_to_run) {
   this.errors = [];
+
+  if (tests_to_run && !tests_to_run.length) {
+    this.tests_to_run = null;
+  } else {
+    this.tests_to_run = tests_to_run;
+  }
   
   for (var name in rewriter.rewrite_rules) {
+    if (this.tests_to_run && this.tests_to_run.indexOf(name) < 0) {
+      continue;
+    }
+
     this.namespace = name;
 
     try {
-      if (name in this.tests) {
-        this.tests[name].call(this);
+      if (name in this.node_tests) {
+        this.node_tests[name].call(this);
       } else {
         this.assert("Test implemented", false);
       }
@@ -31,6 +41,7 @@ function Tester() {
 
 Tester.prototype.rewrite = function (code) {
   var ast = rewriter.get_ast(code, true);
+  // console.log(JSON.stringify(ast, null, 2));
   var rewritten_code = rewriter.rewrite(ast);
   return rewritten_code;
 };
@@ -60,12 +71,15 @@ Tester.prototype.assertEqual = function (a, b) {
 Tester.prototype.assertAddedSemicolon = function (a, b) {
   var args = [].slice.call(arguments);
   args[0] = a + ';';
+  if (args.length === 1) {
+    args[1] = this.rewrite(a);
+  }
   this.assertEqual.apply(this, args);
 };
 
 Tester.pass = function () {};
 
-Tester.prototype.tests = {
+Tester.prototype.node_tests = {
   Literal: function () {
     var code;
     code = 'something';
@@ -168,7 +182,7 @@ Tester.prototype.tests = {
     code = '1 + 1';
     this.assertAddedSemicolon(code);
 
-    code = '1* 1';
+    code = '1 * 1';
     this.assertAddedSemicolon(code);
 
     code = '1 %  6';
@@ -184,7 +198,7 @@ Tester.prototype.tests = {
     code = '5 === 3';
     this.assertAddedSemicolon(code);
 
-    code = '5  == 3';
+    code = '5 ==     3';
     this.assertAddedSemicolon(code);
   },
 
@@ -237,6 +251,9 @@ Tester.prototype.tests = {
     code = 'a.b.c';
     this.assertAddedSemicolon(code);
 
+    code = 'a[b]';
+    this.assertAddedSemicolon(code);
+
     code = 'a[b].c';
     this.assertAddedSemicolon(code);
 
@@ -275,7 +292,227 @@ Tester.prototype.tests = {
 
     code = 'function ret() { return 5 }';
     this.assertEqual('function ret() { return 5; }', this.rewrite(code));
+  },
+
+  CallExpression: function () {
+    var code;
+
+    code = 'someFunction()';
+    this.assertAddedSemicolon(code);
+
+    code = 'someFunction(1, 2, 3)';
+    this.assertAddedSemicolon(code);
+
+    code = 'someFunction(1 2 3)';
+    this.assertEqual('someFunction(1,2,3);', this.rewrite(code));
+  },
+
+  NewExpression: function () {
+    var code;
+
+    code = 'new thing()';
+    this.assertAddedSemicolon(code);
+
+    code = 'new thing';
+    this.assertAddedSemicolon(code);
+
+    code = 'new thing(1, 2, 3)';
+    this.assertAddedSemicolon(code);
+
+    code = 'new thing(1 2 3)';
+    this.assertEqual('new thing(1,2,3);', this.rewrite(code));
+  },
+
+  IfStatement: function () {
+    var code;
+
+    code = 'if (test) {\n'+
+           '  doThis();\n'+
+           '}';
+    this.assertEqual(code);
+
+    code = 'if (test) {\n'+
+           '  doThis();\n'+
+           '} else {\n'+
+           '  doThat();\n'+
+           '}';
+    this.assertEqual(code);
+
+    code = code.replace(/\s+/g, '');
+    this.assertEqual(code);
+
+    code = 'if (thing) console.log(1)';
+    this.assertAddedSemicolon(code);
+
+    code = 'if (thing) console.log(1)\n'+
+           'else console.log(2)';
+    this.assertEqual('if (thing) console.log(1);\n'+
+                     'else console.log(2);', this.rewrite(code));
+
+    code = code.replace(/\n/g, ' ');
+    this.assertEqual('if (thing) console.log(1);else console.log(2);', this.rewrite(code));
+  },
+
+  ConditionalExpression: function () {
+    var code;
+
+    code = 'a ? b : c';
+    this.assertAddedSemicolon(code);
+
+    code = 'a ? b :\n'+
+           'c ? d :\n'+
+           'e';
+    this.assertAddedSemicolon(code);
+  },
+
+  ForInit: Tester.pass,
+
+  UpdateExpression: Tester.pass,
+
+  ForStatement: function () {
+    var code;
+
+    code = 'for (;;) {}';
+    this.assertEqual(code);
+
+    code = 'for (var i = 0;;) {}';
+    this.assertEqual(code);
+
+    code = 'for (; x < 5;) {}';
+    this.assertEqual(code);
+
+    code = 'for (;; i += 1) {}';
+    this.assertEqual(code);
+
+    code = 'for (var i = 0; i < 4;) {}';
+    this.assertEqual(code);
+
+    code = 'for (var i = 0;; i++) {}';
+    this.assertEqual(code);
+
+    code = 'for (; i < 5; i++) {}';
+    this.assertEqual(code);
+
+    code = 'for (var i = 0; i < 6; i++) console.log(i)';
+    this.assertAddedSemicolon(code);
+  },
+
+  ForInStatement: function () {
+    var code;
+
+    code = 'for (var p in obj) console.log(obj[p])';
+    this.assertAddedSemicolon(code);
+
+    code = 'for (var p in obj) {}';
+    this.assertEqual(code);
+  },
+
+  ContinueStatement: function () {
+    var code;
+
+    code = 'for (;;) continue';
+    this.assertAddedSemicolon(code);
+  },
+
+  LabeledStatement: function () {
+    var code;
+
+    code = 'aLabel:\n'+
+           'for (;;) {\n'+
+           '  break aLabel;\n'+
+           '}';
+    this.assertEqual(code);
+
+    code = 'aLabel:\n'+
+           'for (;;) continue aLabel';
+    this.assertAddedSemicolon(code);
+  },
+
+  BreakStatement: function () {
+    var code;
+
+    code = 'for (;;) break';
+    this.assertAddedSemicolon(code);
+  },
+
+  WithStatement: function () {
+    var code;
+
+    code = 'with (obj) console.log(a)';
+    this.assertAddedSemicolon(code);
+
+    code = 'with (obj) {}';
+    this.assertEqual(code);
+  },
+
+  SwitchStatement: function () {
+    var code;
+
+    code = 'switch (obj.x) {\n'+
+           'case 1:\n'+
+           '  doAThing();\n'+
+           '  break;\n'+
+           '\n'+
+           'case 2:\n'+
+           'case 3:\n'+
+           '  doAnotherThing();\n'+
+           '  break;\n'+
+           '\n'+
+           'default:\n'+
+           '  doTheDefaultThing();\n'+
+           '}';
+    this.assertEqual(code);
+  },
+
+  ThrowStatement: function () {
+    var code;
+
+    code = 'throw ""';
+    this.assertAddedSemicolon(code);
+  },
+
+  TryStatement: function () {
+    var code;
+
+    code = 'try { doAThing() }\ncatch (e) {}';
+    this.assertEqual('try { doAThing(); }\ncatch (e) {}', code);
+
+    code = code.replace(/\n/g, ' ');
+    this.assertEqual('try { doAThing(); } catch (e) {}', code);
+  },
+
+  WhileStatement: function () {
+    var code;
+
+    code = 'while (1) {}';
+    this.assertEqual(code);
+  },
+
+  DoWhileStatement: function () {
+    var code;
+
+    code = 'do i += 1\n'+
+           'while (i < 100)';
+    this.assertEqual('do i += 1;\n'+
+                     'while (i < 100);', this.rewrite(code));
+
+    code = 'do {} while (1)';
+    this.assertAddedSemicolon(code);
+  },
+
+  DebuggerStatement: function () {
+    var code;
+
+    code = 'debugger';
+    this.assertAddedSemicolon(code);
+  },
+
+  SequenceExpression: function () {
+    var code;
+
+    code = '(a, b, c, d)';
+    this.assertAddedSemicolon(code);
   }
 };
 
-new Tester();
+new Tester(process.argv.slice(2));

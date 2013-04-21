@@ -181,27 +181,22 @@
     },
 
     BlockStatement: function (node, jscode) {
+      if (node.body.length == 0) {
+        node.loc.end.column -= 1;
+      }
       jscode.set(node.loc.start, "{");
       jscode.set(node.loc.end, "}");
-      // This fixed a problem at one point, but I suspect the problem was elsewhere.
-      //node.loc.end.column += 1;
     },
 
     ExpressionStatement: function (node, jscode) {
-      jscode.set(node.expression.loc.end, ';');
+      if (node.expression.type === 'ObjectExpression' || node.expression.type === 'FunctionExpression') {
+        jscode.set(node.loc.start, '(');
+        jscode.set(new_loc_branch(node.loc.end, {column: -1}), ')');
+      }
+      jscode.set(node.loc.end, ';');
     },
 
     EmptyStatement: function (node, jscode) {
-      // var end;
-      // if (!node.loc.end) {
-      //   end = new_loc_branch(node.loc.start, {column: 1});
-      // } else {
-      //   end = new_loc_branch(node.loc.end, {column: -1});
-      // }
-
-      // jscode.set(node.loc.start, '(');
-      // jscode.set(end, ')');
-      
       jscode.set(node.loc.start, ';');
     },
 
@@ -237,12 +232,12 @@
       var object = node.object,
           property = node.property;
 
-      if (property.type === "Identifier") {
-        jscode.set(object.loc.end, '.');
-        rewrite_node.call(this, node.property, jscode);
-      } else {
+      if (node.computed) {
         jscode.set(object.loc.end, '[');
         jscode.set(new_loc_branch(node.loc.end, {column: -1}), ']');
+      } else {
+        jscode.set(object.loc.end, '.');
+        rewrite_node.call(this, node.property, jscode);
       }
     },
 
@@ -374,13 +369,29 @@
 
     ContinueStatement: function (node, jscode) {
       jscode.set(node.loc.start, 'continue');
+      if (node.label) {
+        rewrite_node.call(this, node.label, jscode);
+      }
+      jscode.set(node.loc.end, ';');
+    },
+
+    BreakStatement: function (node, jscode) {
+      jscode.set(node.loc.start, 'break');
+      if (node.label) {
+        rewrite_node.call(this, node.label, jscode);
+      }
+      jscode.set(node.loc.end, ';');
+    },
+
+    LabeledStatement: function (node, jscode) {
+      rewrite_node.call(this, node.label, jscode);
+      jscode.set(node.label.loc.end, ':');
     }
   };
 
   function def_error(key) {
     exports.rewrite_rules[key] = function (node) {
-      console.error(key, node);
-      throw "NotImplementedError: '" + key + "' is required";
+      throw "rewrite: NotImplementedError: '" + key + "' is required";
     };
   }
 
